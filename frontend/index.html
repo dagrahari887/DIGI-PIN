@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI-DIGIPIN Address Intelligence — Console</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink: "#14231F",
+          surface: "#EFF1EC",
+          panel: "#FFFFFF",
+          line: "#C9CFC6",
+          postal: "#D8491F",
+          grid: "#1F7A5C",
+          alert: "#B23A48",
+          muted: "#5B655E",
+          low: "#1F7A5C",
+          medium: "#B8860B",
+          high: "#D8491F",
+          critical: "#B23A48",
+        },
+        fontFamily: {
+          display: ["Space Grotesk", "sans-serif"],
+          body: ["IBM Plex Sans", "sans-serif"],
+          mono: ["IBM Plex Mono", "monospace"],
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { font-family: 'IBM Plex Sans', sans-serif; background: #EFF1EC; color: #14231F; }
+  #map { height: 100%; width: 100%; background: #DCE0D8; }
+  .leaflet-container { font-family: 'IBM Plex Sans', sans-serif; }
+
+  .stage-card { border: 1px solid #E4E7E1; border-radius: 5px; background: #FFFFFF; margin-bottom: 10px; overflow: hidden; }
+  .stage-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #FAFBF9; border-bottom: 1px solid #E4E7E1; }
+  .stage-title { font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: #5B655E; font-weight: 600; }
+  .stage-body { padding: 12px 14px; }
+
+  .field-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid #F0F1EE; }
+  .field-row:last-child { border-bottom: none; }
+  .field-label { color: #5B655E; font-size: 12px; }
+  .field-value { font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right; max-width: 62%; word-break: break-word; }
+
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; padding: 3px 8px; border-radius: 3px; }
+  .badge-complete, .badge-proceed, .badge-low { background: #EAF3EF; color: #1F7A5C; }
+  .badge-incomplete, .badge-medium { background: #FBF3E2; color: #8A6300; }
+  .badge-minimal, .badge-needs_confirmation, .badge-high { background: #FBEAE3; color: #B8541F; }
+  .badge-reject, .badge-critical { background: #FBE7E9; color: #B23A48; }
+  .badge-unverified { background: #F0F1EE; color: #5B655E; }
+  .badge-partially_verified { background: #FBF3E2; color: #8A6300; }
+  .badge-verified { background: #EAF3EF; color: #1F7A5C; }
+
+  .quality-track { height: 5px; background: #E4E7E1; border-radius: 3px; overflow: hidden; margin: 6px 0 2px; }
+  .quality-fill { height: 100%; transition: width 0.3s ease; }
+
+  .verify-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; }
+  .verify-btn { font-size: 10.5px; font-family: 'IBM Plex Mono', monospace; padding: 2px 7px; border: 1px solid #C9CFC6; border-radius: 3px; background: #fff; cursor: pointer; color: #5B655E; }
+  .verify-btn:hover { border-color: #1F7A5C; color: #1F7A5C; }
+  .verify-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .candidate-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid #E4E7E1; border-radius: 4px; margin-bottom: 6px; }
+  .candidate-row button { font-size: 11px; background: #14231F; color: #fff; padding: 4px 10px; border-radius: 3px; }
+  .candidate-row button:hover { background: #D8491F; }
+
+  .floor-rail { display: flex; flex-direction: column-reverse; gap: 4px; max-height: 180px; overflow-y: auto; }
+  .floor-rail::-webkit-scrollbar { width: 4px; }
+  .floor-rail::-webkit-scrollbar-thumb { background: #C9CFC6; border-radius: 2px; }
+  .floor-btn { display: flex; align-items: center; gap: 8px; padding: 5px 9px; border: 1px solid #C9CFC6; border-radius: 3px; background: #FFFFFF; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5B655E; }
+  .floor-btn:hover { border-color: #1F7A5C; }
+  .floor-btn.active { border-color: #1F7A5C; color: #14231F; background: #EAF3EF; font-weight: 600; }
+
+  .digipin-code { font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.5px; }
+  ::selection { background: #1F7A5C; color: white; }
+  #loading-bar { transition: opacity 0.2s ease; }
+
+  .flow-rail { display: flex; align-items: center; gap: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5B655E; flex-wrap: wrap; }
+  .flow-step { padding: 2px 6px; border-radius: 2px; background: #F0F1EE; }
+  .flow-step.done { background: #EAF3EF; color: #1F7A5C; }
+  .flow-step.skip { background: #FBEAE3; color: #B8541F; }
+</style>
+</head>
+<body class="font-body">
+
+<div class="h-screen w-screen flex flex-col">
+
+  <!-- Top bar -->
+  <header class="flex items-center justify-between px-5 py-3 border-b border-line bg-panel shrink-0">
+    <div class="flex items-baseline gap-2">
+      <span class="font-display font-700 text-[19px] tracking-tight">AI-DIGIPIN</span>
+      <span class="text-muted text-[13px]">Address Intelligence — Console</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="text-[10.5px] text-muted font-mono">API-first · this UI is a demo/admin console</span>
+      <a href="http://localhost:8000/docs" target="_blank" class="text-[11px] font-mono text-postal hover:underline">/docs ↗</a>
+    </div>
+  </header>
+
+  <div class="flex flex-1 min-h-0">
+
+    <!-- Sidebar -->
+    <aside class="w-[420px] shrink-0 border-r border-line bg-surface flex flex-col overflow-y-auto p-4">
+
+      <!-- Search -->
+      <div class="stage-card">
+        <div class="stage-head">
+          <span class="stage-title">1 · Raw address</span>
+          <select id="demo-select" class="text-[11px] font-mono border border-line rounded px-1.5 py-0.5 bg-white">
+            <option value="">Demo scenarios…</option>
+            <option value="complete">Complete apartment</option>
+            <option value="landmark">Landmark-only</option>
+            <option value="missingfloor">Missing floor</option>
+            <option value="missingflat">Missing flat</option>
+            <option value="ambiguous">Ambiguous address</option>
+            <option value="invalid">Invalid address</option>
+            <option value="campus">Campus / university</option>
+            <option value="commercial">Commercial building</option>
+          </select>
+        </div>
+        <div class="stage-body">
+          <textarea id="address-input" rows="3"
+            class="w-full border border-line rounded-[3px] px-3 py-2 text-[13.5px] leading-snug focus:outline-none focus:border-grid resize-none"
+            placeholder="Flat 302, 3rd Floor, Near Durga Temple, Sector 62, Noida, 201301"></textarea>
+          <button id="resolve-btn"
+            class="mt-3 w-full bg-ink text-white text-[13px] font-medium py-2.5 rounded-[3px] hover:bg-postal transition-colors">
+            Resolve address
+          </button>
+          <p id="error-msg" class="text-alert text-[12px] mt-2 hidden"></p>
+        </div>
+      </div>
+
+      <!-- Pipeline flow indicator -->
+      <div class="flow-rail px-1 mb-3" id="flow-rail">
+        <span class="flow-step" data-step="quality">Quality</span>→
+        <span class="flow-step" data-step="validation">Validation</span>→
+        <span class="flow-step" data-step="location">Location</span>→
+        <span class="flow-step" data-step="digipin">DIGIPIN</span>→
+        <span class="flow-step" data-step="delivery">Delivery Pt</span>→
+        <span class="flow-step" data-step="vertical">Vertical</span>→
+        <span class="flow-step" data-step="risk">Risk</span>→
+        <span class="flow-step" data-step="verification">Verify</span>→
+        <span class="flow-step" data-step="instructions">Instructions</span>
+      </div>
+
+      <div id="results" style="display:none;">
+
+        <!-- Quality -->
+        <div class="stage-card">
+          <div class="stage-head"><span class="stage-title">2 · Address quality</span><span id="quality-badge" class="badge">—</span></div>
+          <div class="stage-body">
+            <div class="quality-track"><div class="quality-fill" id="quality-fill" style="width:0%; background:#1F7A5C;"></div></div>
+            <ul id="quality-reasons" class="text-[12px] text-muted mt-2 list-disc list-inside space-y-0.5"></ul>
+          </div>
+        </div>
+
+        <!-- Validation -->
+        <div class="stage-card" id="validation-card">
+          <div class="stage-head"><span class="stage-title">3 · Validation</span><span id="validation-badge" class="badge">—</span></div>
+          <div class="stage-body">
+            <ul id="validation-issues" class="text-[12px] text-muted list-disc list-inside space-y-0.5 mb-2"></ul>
+            <div id="candidates-list"></div>
+          </div>
+        </div>
+
+        <!-- Location + DIGIPIN -->
+        <div class="stage-card" id="location-card" style="display:none;">
+          <div class="stage-head"><span class="stage-title">4-5 · Location &amp; DIGIPIN</span></div>
+          <div class="stage-body">
+            <div class="bg-[#EAF3EF] border border-grid/30 rounded-[4px] px-4 py-3 mb-2">
+              <div class="text-[11px] text-muted mb-1">DIGIPIN (2D, ~4m×4m cell)</div>
+              <div class="digipin-code text-[19px] font-semibold text-grid" id="digipin-display">—</div>
+            </div>
+            <div id="location-fields"></div>
+          </div>
+        </div>
+
+        <!-- Vertical destination -->
+        <div class="stage-card" id="vertical-card" style="display:none;">
+          <div class="stage-head"><span class="stage-title">6 · Vertical destination</span></div>
+          <div class="stage-body">
+            <p class="text-[11.5px] text-muted mb-2 leading-relaxed">2D location ends at the building footprint. Floor/unit come from address text, confirmation, or courier — never inferred from GPS.</p>
+            <div class="flex gap-3">
+              <div class="floor-rail" id="floor-rail"></div>
+              <div id="vertical-fields" class="flex-1"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Risk -->
+        <div class="stage-card">
+          <div class="stage-head"><span class="stage-title">7 · Delivery risk</span><span id="risk-badge" class="badge">—</span></div>
+          <div class="stage-body">
+            <ul id="risk-reasons" class="text-[12px] text-muted list-disc list-inside space-y-0.5"></ul>
+          </div>
+        </div>
+
+        <!-- Verification -->
+        <div class="stage-card">
+          <div class="stage-head"><span class="stage-title">8 · Verification</span><span id="verification-badge" class="badge">—</span></div>
+          <div class="stage-body" id="verification-fields"></div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="stage-card">
+          <div class="stage-head"><span class="stage-title">9 · Courier instructions</span></div>
+          <div class="stage-body">
+            <p class="text-[13px] leading-relaxed" id="delivery-instructions">—</p>
+            <div id="lift-warning" class="mt-2 text-[12px] text-postal hidden">⚠ High floor — confirm lift availability before dispatch.</div>
+          </div>
+        </div>
+
+        <details class="stage-card">
+          <summary class="stage-head cursor-pointer select-none"><span class="stage-title">Raw API response</span></summary>
+          <div class="stage-body"><pre id="raw-json" class="text-[10.5px] font-mono whitespace-pre-wrap max-h-60 overflow-y-auto"></pre></div>
+        </details>
+
+      </div>
+    </aside>
+
+    <!-- Map -->
+    <main class="flex-1 relative">
+      <div id="map"></div>
+      <div id="loading-bar" class="absolute top-4 left-1/2 -translate-x-1/2 bg-ink text-white text-[12px] px-4 py-2 rounded-full opacity-0 pointer-events-none">
+        Resolving address…
+      </div>
+    </main>
+
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
